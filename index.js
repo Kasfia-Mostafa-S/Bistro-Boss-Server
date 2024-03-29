@@ -2,13 +2,14 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 require("dotenv").config();
+const jwt = require("jsonwebtoken");
 const port = process.env.PORt || 5000;
 
 // middleware
 app.use(cors());
 app.use(express.json());
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ijwgr8d.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -26,24 +27,86 @@ async function run() {
     // await client.connect();
 
     const menuCollection = client.db("BistroBossDB").collection("menu");
+    const usersCollection = client.db("BistroBossDB").collection("users");
     const reviewsCollection = client.db("BistroBossDB").collection("reviews");
+    const cartCollection = client.db("BistroBossDB").collection("carts");
+
+    // jwt
+    app.post("/jwt", async (req, res) => {
+      const user= req.body
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN, {
+        expiresIn: "1h",
+      });
+      res.send({ token });
+    });
+
+    //  user related
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existUser = await usersCollection.findOne(query);
+      if (existUser) {
+        return res.send({ message: `user already exist`, insertedId: null });
+      }
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.get("/users", async (req, res) => {
+      console.log(req.headers)
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.delete("/users/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.patch("/users/admin/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: "admin",
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
 
     app.get("/menu", async (req, res) => {
       const result = await menuCollection.find().toArray();
       res.send(result);
     });
 
+    // cart collection
+    app.get("/carts", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await cartCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.post("/carts", async (req, res) => {
+      const cartItem = req.body;
+      const result = await cartCollection.insertOne(cartItem);
+      res.send(result);
+    });
+
+    app.delete("/carts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await cartCollection.deleteOne(query);
+      res.send(result);
+    });
 
     app.get("/reviews", async (req, res) => {
       const result = await reviewsCollection.find().toArray();
       res.send(result);
     });
-
-
-
-
-
-
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
